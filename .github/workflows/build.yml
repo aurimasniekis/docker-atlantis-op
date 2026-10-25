@@ -52,6 +52,10 @@ jobs:
           docker run --rm -e OP_CONNECT_HOST=http://127.0.0.1:9 -e OP_CONNECT_TOKEN=x \
             atlantis-op:test version | grep '${{ steps.versions.outputs.atlantis }}'
           docker run --rm --entrypoint op atlantis-op:test --version | grep '${{ steps.versions.outputs.op }}'
+          # Default CMD reaches `atlantis server` (fails on missing GitHub config, as expected)
+          out="$(docker run --rm -e OP_CONNECT_HOST=http://127.0.0.1:9 -e OP_CONNECT_TOKEN=x atlantis-op:test 2>&1 || true)"
+          echo "$out"
+          grep -q -- '--gh-user' <<<"$out"
 
       - uses: docker/login-action@v4
         if: github.event_name != 'pull_request'

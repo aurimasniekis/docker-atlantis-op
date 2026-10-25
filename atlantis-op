@@ -55,9 +55,14 @@ for f in "${env_files[@]}"; do
 done
 
 # Same rule as the upstream entrypoint: flags or an atlantis subcommand -> atlantis.
+# Capture the help text instead of piping it into `grep -q`: grep exits on the first
+# match, atlantis gets SIGPIPE on long help output and pipefail fails the check.
 [[ $# -gt 0 ]] || set -- server
-if [[ "$1" == -* ]] || atlantis help "$1" 2>&1 | grep -q "atlantis $1"; then
+if [[ "$1" == -* ]]; then
   set -- atlantis "$@"
+else
+  help="$(atlantis help "$1" 2>&1 || true)"
+  [[ "$help" == *"atlantis $1"* ]] && set -- atlantis "$@"
 fi
 
 echo "atlantis-op: resolving secrets via $mode${op_args[*]:+ (${op_args[*]})}" >&2
