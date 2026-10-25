@@ -1,0 +1,48 @@
+# Atlantis authenticating to a self-hosted 1Password Connect server.
+#
+#   op connect server create atlantis --vaults Atlantis        # -> 1password-credentials.json
+#   mkdir -p secrets && op connect token create atlantis --server atlantis --vault Atlantis \
+#     > secrets/op_connect_token
+#   cp .env.example .env
+#   docker compose up -d
+services:
+  atlantis:
+    image: ghcr.io/aurimasniekis/docker-atlantis-op:latest
+    restart: unless-stopped
+    depends_on:
+      - op-connect-api
+    ports:
+      - "4141:4141"
+    environment:
+      ATLANTIS_ATLANTIS_URL: ${ATLANTIS_ATLANTIS_URL:?set in .env}
+      ATLANTIS_REPO_CONFIG: /etc/atlantis/repos.yaml
+      OP_CONNECT_HOST: http://op-connect-api:8080
+      OP_CONNECT_TOKEN_FILE: /run/secrets/op_connect_token
+    secrets:
+      - op_connect_token
+    volumes:
+      - ../atlantis.env.op:/etc/atlantis/atlantis.env.op:ro
+      - ../repos.yaml:/etc/atlantis/repos.yaml:ro
+      - atlantis-data:/home/atlantis/.atlantis
+
+  op-connect-api:
+    image: 1password/connect-api:1.8
+    restart: unless-stopped
+    volumes:
+      - ./1password-credentials.json:/home/opuser/.op/1password-credentials.json:ro
+      - op-connect-data:/home/opuser/.op/data
+
+  op-connect-sync:
+    image: 1password/connect-sync:1.8
+    restart: unless-stopped
+    volumes:
+      - ./1password-credentials.json:/home/opuser/.op/1password-credentials.json:ro
+      - op-connect-data:/home/opuser/.op/data
+
+secrets:
+  op_connect_token:
+    file: ./secrets/op_connect_token
+
+volumes:
+  atlantis-data:
+  op-connect-data:

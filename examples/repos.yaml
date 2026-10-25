@@ -1,0 +1,7 @@
+# Server-side repo config: mounted at /etc/atlantis/repos.yaml, enabled with
+# ATLANTIS_REPO_CONFIG. https://www.runatlantis.io/docs/server-side-repo-config
+repos:
+  - id: /.*/
+    apply_requirements: [approved, mergeable, undiverged]
+    allowed_overrides: []
+    allow_custom_workflows: false

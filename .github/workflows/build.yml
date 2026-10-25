@@ -1,0 +1,80 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/docker-atlantis-op
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Lint entrypoint
+        run: shellcheck atlantis-op
+
+      - name: Read versions from Dockerfile
+        id: versions
+        run: |
+          echo "atlantis=$(grep -m1 -oP 'runatlantis/atlantis:\K\S+' Dockerfile)" >> "$GITHUB_OUTPUT"
+          echo "op=$(grep -m1 -oP '1password/op:\K\S+' Dockerfile)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build for smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: atlantis-op:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          # Refuses to start without 1Password credentials
+          if docker run --rm atlantis-op:test; then
+            echo "expected startup without credentials to fail" >&2
+            exit 1
+          fi
+          # Runs atlantis under `op run` (no op:// references -> no API calls)
+          docker run --rm -e OP_CONNECT_HOST=http://127.0.0.1:9 -e OP_CONNECT_TOKEN=x \
+            atlantis-op:test version | grep '${{ steps.versions.outputs.atlantis }}'
+          docker run --rm --entrypoint op atlantis-op:test --version | grep '${{ steps.versions.outputs.op }}'
+
+      - uses: docker/login-action@v4
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.versions.outputs.atlantis }},enable={{is_default_branch}}
+            type=raw,value=${{ steps.versions.outputs.atlantis }}-op${{ steps.versions.outputs.op }},enable={{is_default_branch}}
+            type=sha
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

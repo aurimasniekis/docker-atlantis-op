@@ -1,0 +1,28 @@
+# Atlantis authenticating to 1Password with a service account.
+#
+#   mkdir -p secrets && printf %s "$TOKEN" > secrets/op_service_account_token
+#   cp .env.example .env
+#   docker compose up -d
+services:
+  atlantis:
+    image: ghcr.io/aurimasniekis/docker-atlantis-op:latest
+    restart: unless-stopped
+    ports:
+      - "4141:4141"
+    environment:
+      ATLANTIS_ATLANTIS_URL: ${ATLANTIS_ATLANTIS_URL:?set in .env}
+      ATLANTIS_REPO_CONFIG: /etc/atlantis/repos.yaml
+      OP_SERVICE_ACCOUNT_TOKEN_FILE: /run/secrets/op_service_account_token
+    secrets:
+      - op_service_account_token
+    volumes:
+      - ../atlantis.env.op:/etc/atlantis/atlantis.env.op:ro
+      - ../repos.yaml:/etc/atlantis/repos.yaml:ro
+      - atlantis-data:/home/atlantis/.atlantis
+
+secrets:
+  op_service_account_token:
+    file: ./secrets/op_service_account_token
+
+volumes:
+  atlantis-data:

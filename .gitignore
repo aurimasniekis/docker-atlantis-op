@@ -1,0 +1,5 @@
+.env
+secrets/
+1password-credentials.json
+.DS_Store
+.idea/

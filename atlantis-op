@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Run Atlantis (or any command) under `op run`, so op:// secret references in the
+# environment and in $OP_ENV_FILE are resolved before Atlantis starts.
+#
+# Auth, exactly one of:
+#   OP_SERVICE_ACCOUNT_TOKEN[_FILE]            1Password service account
+#   OP_CONNECT_HOST + OP_CONNECT_TOKEN[_FILE]  1Password Connect server
+#
+# Terraform runs inherit the same variables, so the 1Password Terraform provider
+# authenticates with no extra configuration.
+set -euo pipefail
+
+readonly default_env_file=/etc/atlantis/atlantis.env.op
+
+die() {
+  echo "atlantis-op: $*" >&2
+  exit 1
+}
+
+# VAR_FILE -> VAR (Docker / Compose / Kubernetes secrets)
+for var in OP_SERVICE_ACCOUNT_TOKEN OP_CONNECT_TOKEN; do
+  file_var="${var}_FILE"
+  if [[ -n "${!file_var:-}" ]]; then
+    [[ -z "${!var:-}" ]] || die "set either $var or $file_var, not both"
+    [[ -r "${!file_var}" ]] || die "$file_var: cannot read ${!file_var}"
+    export "$var=$(<"${!file_var}")"
+  fi
+  unset "$file_var"
+done
+
+if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
+  [[ -z "${OP_CONNECT_HOST:-}${OP_CONNECT_TOKEN:-}" ]] ||
+    die "both service account and Connect credentials are set; use one"
+  mode="service account"
+elif [[ -n "${OP_CONNECT_HOST:-}${OP_CONNECT_TOKEN:-}" ]]; then
+  [[ -n "${OP_CONNECT_HOST:-}" ]] || die "OP_CONNECT_TOKEN is set but OP_CONNECT_HOST is not"
+  [[ -n "${OP_CONNECT_TOKEN:-}" ]] || die "OP_CONNECT_HOST is set but OP_CONNECT_TOKEN is not"
+  mode="Connect ($OP_CONNECT_HOST)"
+else
+  die "no 1Password credentials: set OP_SERVICE_ACCOUNT_TOKEN or OP_CONNECT_HOST + OP_CONNECT_TOKEN"
+fi
+
+# Desktop app integration doesn't exist in a container.
+unset OP_ACCOUNT
+
+# Comma-separated env files. The image default is optional, explicit ones are not.
+op_args=()
+IFS=, read -ra env_files <<<"${OP_ENV_FILE:-}"
+for f in "${env_files[@]}"; do
+  if [[ -f "$f" ]]; then
+    op_args+=("--env-file=$f")
+  elif [[ "$f" != "$default_env_file" ]]; then
+    die "OP_ENV_FILE: $f not found"
+  fi
+done
+
+# Same rule as the upstream entrypoint: flags or an atlantis subcommand -> atlantis.
+[[ $# -gt 0 ]] || set -- server
+if [[ "$1" == -* ]] || atlantis help "$1" 2>&1 | grep -q "atlantis $1"; then
+  set -- atlantis "$@"
+fi
+
+echo "atlantis-op: resolving secrets via $mode${op_args[*]:+ (${op_args[*]})}" >&2
+exec op run ${op_args[@]+"${op_args[@]}"} -- "$@"
