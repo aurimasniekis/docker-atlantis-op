@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM 1password/op:2.41.1 AS op
+FROM 1password/op:2.42.0 AS op
 
 FROM ghcr.io/runatlantis/atlantis:v0.49.0
 
