@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM 1password/op:2.41.1 AS op
 
-FROM ghcr.io/runatlantis/atlantis:v0.49.0
+FROM ghcr.io/runatlantis/atlantis:v0.50.0
 
 LABEL org.opencontainers.image.title="atlantis-op" \
       org.opencontainers.image.description="Atlantis with 1Password CLI: resolve op:// secret references via a service account or 1Password Connect" \
